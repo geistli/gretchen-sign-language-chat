@@ -37,7 +37,7 @@ def open_camera(use_robot):
         robot.center()
         return robot, robot.camera
     else:
-        cap = cv2.VideoCapture(config.CAMERA_INDEX)
+        cap = cv2.VideoCapture(config.CAMERA_DEV)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
         if not cap.isOpened():

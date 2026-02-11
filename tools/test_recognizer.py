@@ -26,16 +26,21 @@ from recognizer import ASLRecognizer, detect_border_color
 
 def main():
     parser = argparse.ArgumentParser(description="Test ASL recognizer")
-    parser.add_argument("--camera", type=int, default=config.CAMERA_INDEX,
-                        help="Camera index")
+    parser.add_argument("--camera", default=config.CAMERA_DEV,
+                        help="Camera device path or index (default: /dev/grt_cam)")
     args = parser.parse_args()
 
     # Open camera
-    cap = cv2.VideoCapture(args.camera)
+    cam = args.camera
+    try:
+        cam = int(cam)
+    except ValueError:
+        pass
+    cap = cv2.VideoCapture(cam)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
     if not cap.isOpened():
-        print(f"Error: cannot open camera {args.camera}")
+        print(f"Error: cannot open camera {cam}")
         sys.exit(1)
 
     # Load recognizer
