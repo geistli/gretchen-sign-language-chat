@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+#
+# Test tool: detect ASL letters from camera feed.
+#
+# Usage:
+#   python tools/test_recognizer.py             # Use default camera
+#   python tools/test_recognizer.py --camera 1  # Use camera index 1
+#
+# Keys:
+#   C — clear accumulated word
+#   B — toggle border color detection display
+#   ESC — quit
+#
+
+import sys
+import os
+import argparse
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import cv2
+import config
+from recognizer import ASLRecognizer, detect_border_color
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Test ASL recognizer")
+    parser.add_argument("--camera", type=int, default=config.CAMERA_INDEX,
+                        help="Camera index")
+    args = parser.parse_args()
+
+    # Open camera
+    cap = cv2.VideoCapture(args.camera)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+    if not cap.isOpened():
+        print(f"Error: cannot open camera {args.camera}")
+        sys.exit(1)
+
+    # Load recognizer
+    recognizer = ASLRecognizer()
+
+    print("ASL Recognizer Test")
+    print("C=clear word, B=show border detection, ESC=quit")
+
+    show_border = False
+
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            continue
+
+        # Detect ASL letters
+        confirmed, best, conf, annotated = recognizer.process_frame(frame)
+
+        if confirmed:
+            print(f"  CONFIRMED: {confirmed}  (word so far: {''.join(recognizer.word_buffer)})")
+
+        # Optionally show border color detection
+        if show_border:
+            border = detect_border_color(frame)
+            color_text = f"Border: {border or 'none'}"
+            cv2.putText(
+                annotated, color_text, (10, annotated.shape[0] - 20),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2,
+            )
+
+        cv2.imshow(config.CAMERA_WINDOW, annotated)
+
+        key = cv2.waitKey(1)
+        if key == 27:  # ESC
+            break
+        elif key == ord('c'):
+            word = recognizer.get_word()
+            print(f"  Word cleared: {word}")
+        elif key == ord('b'):
+            show_border = not show_border
+            print(f"  Border detection: {'ON' if show_border else 'OFF'}")
+
+    word = recognizer.get_word()
+    if word:
+        print(f"\nFinal word: {word}")
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print("Done.")
+
+
+if __name__ == "__main__":
+    main()
