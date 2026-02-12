@@ -9,7 +9,7 @@
 # Keys:
 #   C — clear accumulated word
 #   B — toggle border color detection display
-#   ESC — quit
+#   Q/ESC — quit
 #
 
 import sys
@@ -19,10 +19,14 @@ import argparse
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import time
 import cv2
 import config
 from recognizer import ASLRecognizer, detect_border_color
 
+# Run YOLO detection this times per second, show camera feed in between
+DETECT_INTERVAL = 1.0 / 5.0
+1
 
 def main():
     parser = argparse.ArgumentParser(description="Test ASL recognizer")
@@ -47,34 +51,44 @@ def main():
     recognizer = ASLRecognizer()
 
     print("ASL Recognizer Test")
-    print("C=clear word, B=show border detection, ESC=quit")
+    print("C=clear word, B=show border detection, Q/ESC=quit")
 
     show_border = False
+    last_detect_time = 0
+    last_annotated = None
 
     while True:
         ok, frame = cap.read()
         if not ok:
             continue
 
-        # Detect ASL letters
-        confirmed, best, conf, annotated = recognizer.process_frame(frame)
+        now = time.time()
 
-        if confirmed:
-            print(f"  CONFIRMED: {confirmed}  (word so far: {''.join(recognizer.word_buffer)})")
+        # Run YOLO only every DETECT_INTERVAL seconds
+        if now - last_detect_time >= DETECT_INTERVAL:
+            last_detect_time = now
+            confirmed, best, conf, annotated = recognizer.process_frame(frame)
+            last_annotated = annotated
 
-        # Optionally show border color detection
-        if show_border:
-            border = detect_border_color(frame)
-            color_text = f"Border: {border or 'none'}"
-            cv2.putText(
-                annotated, color_text, (10, annotated.shape[0] - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2,
-            )
+            if confirmed:
+                print(f"  CONFIRMED: {confirmed}  (word so far: {''.join(recognizer.word_buffer)})")
 
-        cv2.imshow(config.CAMERA_WINDOW, annotated)
+            if show_border:
+                border = detect_border_color(frame)
+                color_text = f"Border: {border or 'none'}"
+                cv2.putText(
+                    annotated, color_text, (10, annotated.shape[0] - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2,
+                )
+        # Between detections, keep showing the last annotated frame
+        # so detection boxes don't flicker on/off
+        if last_annotated is not None:
+            cv2.imshow(config.CAMERA_WINDOW, last_annotated)
+        else:
+            cv2.imshow(config.CAMERA_WINDOW, frame)
 
         key = cv2.waitKey(1)
-        if key == 27:  # ESC
+        if key == 27 or key == ord('q'):
             break
         elif key == ord('c'):
             word = recognizer.get_word()

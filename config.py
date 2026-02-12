@@ -22,9 +22,9 @@ NMS_THRESHOLD = 0.4
 
 # --- Letter Accumulation ---
 # Number of consecutive frames with same letter to confirm detection
-ACCUMULATION_FRAMES = 8
+ACCUMULATION_FRAMES = 4
 # Maximum gap (frames without detection) before resetting accumulator
-MAX_GAP_FRAMES = 3
+MAX_GAP_FRAMES = 4
 
 # --- Display ---
 BORDER_WIDTH = 40  # pixels, thick border for reliable color detection
