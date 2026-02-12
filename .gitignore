@@ -18,5 +18,8 @@ images/test/
 .vscode/
 .idea/
 
+# Archives
+*.zip
+
 # OS
 .DS_Store
