@@ -22,12 +22,13 @@ import cv2
 import config
 from display import ASLDisplay
 
-LETTERS_PER_SECOND = 3
+LETTERS_PER_SECOND = 1
 LETTER_MS = int(1000 / LETTERS_PER_SECOND)
 SPACE_MS = 500  # pause between words
 
 
 def main():
+    config.IMAGES_DIR = os.path.join(config.BASE_DIR, "images", "own")
     display = ASLDisplay()
 
     message = sys.argv[1].upper() if len(sys.argv) > 1 else "HELLO I AM GRETCHEN"
