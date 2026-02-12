@@ -22,7 +22,7 @@ import cv2
 import config
 from display import ASLDisplay
 
-LETTERS_PER_SECOND = 1
+LETTERS_PER_SECOND = 0.5
 LETTER_MS = int(1000 / LETTERS_PER_SECOND)
 SPACE_MS = 500  # pause between words
 

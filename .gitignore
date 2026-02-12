@@ -4,11 +4,15 @@ __pycache__/
 
 # Model weights (too large for git — download with tools/download_model.py)
 model/*.pt
+model/*.task
 
 # Images (download with tools/download_images.py)
 images/*.jpg
 images/*.png
 images/backup/
+images/kaggle/
+images/own/
+images/test/
 
 # IDE
 .vscode/
