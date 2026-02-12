@@ -2,9 +2,9 @@
 #
 # Capture tool: recognize ASL signs and take a photo when confirmed.
 #
-# Runs the YOLO model on the camera feed. When the accumulator confirms
-# a letter (same sign detected for several consecutive frames), the raw
-# camera frame is saved to images/captures/.
+# Runs the MediaPipe gesture recognizer on the camera feed. When the
+# accumulator confirms a letter (same sign detected for several consecutive
+# frames), the raw camera frame is saved to images/captures/.
 #
 # Usage:
 #   python tools/capture_sign.py                  # default camera (index 0)
@@ -13,7 +13,7 @@
 #   python tools/capture_sign.py --out ./my_pics  # custom output directory
 #
 # Keys:
-#   C — clear accumulated word
+#   R — reset accumulator
 #   Q / ESC — quit
 #
 
@@ -27,9 +27,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cv2
 import config
-from recognizer import ASLRecognizer
+from recognizer_mediapipe import MediaPipeRecognizer
 
-# Detection rate (seconds between YOLO runs)
+# Detection rate (seconds between detection runs)
 DETECT_INTERVAL = 1.0 / 5.0
 
 # How long to show the "CAPTURED!" flash overlay (seconds)
@@ -68,11 +68,11 @@ def main():
     print(f"Photos will be saved to: {os.path.abspath(args.out)}")
 
     # --- Load recognizer ---
-    recognizer = ASLRecognizer()
+    recognizer = MediaPipeRecognizer()
 
     print("\nASL Sign Capture")
-    print("Show a sign to the camera — a photo is taken when the sign is confirmed.")
-    print("C = clear word, Q/ESC = quit\n")
+    print("Show a sign to the camera — a photo is taken when the letter is confirmed.")
+    print("R = reset, Q/ESC = quit\n")
 
     last_detect_time = 0
     last_annotated = None
@@ -113,7 +113,7 @@ def main():
                 else:
                     print(f"  SKIPPED   sign '{confirmed}' (conf {conf:.2f} <= saved {prev_conf:.2f})")
 
-                print(f"  Word so far: {''.join(recognizer.word_buffer)}")
+                print(f"  Letters captured so far: {len(best_captures)}")
 
         # --- Build display frame ---
         display = last_annotated if last_annotated is not None else frame
@@ -140,15 +140,11 @@ def main():
         key = cv2.waitKey(1)
         if key == 27 or key == ord('q'):
             break
-        elif key == ord('c'):
-            word = recognizer.get_word()
-            print(f"  Word cleared: {word}")
+        elif key == ord('r'):
+            recognizer.reset()
+            print("  Accumulator reset")
 
     # --- Cleanup ---
-    word = recognizer.get_word()
-    if word:
-        print(f"\nFinal word: {word}")
-
     print(f"\nLetters captured: {len(best_captures)}")
     for letter, c in sorted(best_captures.items()):
         print(f"  {letter}: conf {c:.2f}")

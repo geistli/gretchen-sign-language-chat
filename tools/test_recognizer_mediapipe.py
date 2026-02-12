@@ -7,7 +7,7 @@
 #   python tools/test_recognizer_mediapipe.py --camera 0     # Webcam index 0
 #
 # Keys:
-#   C — clear accumulated word
+#   R — reset accumulator
 #   Q/ESC — quit
 #
 
@@ -50,7 +50,7 @@ def main():
     recognizer = MediaPipeRecognizer()
 
     print("MediaPipe ASL Recognizer Test")
-    print("C=clear word, Q/ESC=quit")
+    print("R=reset, Q/ESC=quit")
 
     last_detect_time = 0
     last_annotated = None
@@ -68,7 +68,7 @@ def main():
             last_annotated = annotated
 
             if confirmed:
-                print(f"  CONFIRMED: {confirmed}  (word so far: {''.join(recognizer.word_buffer)})")
+                print(f"  CONFIRMED: {confirmed}")
 
         if last_annotated is not None:
             cv2.imshow("MediaPipe ASL", last_annotated)
@@ -78,13 +78,9 @@ def main():
         key = cv2.waitKey(1)
         if key == 27 or key == ord('q'):
             break
-        elif key == ord('c'):
-            word = recognizer.get_word()
-            print(f"  Word cleared: {word}")
-
-    word = recognizer.get_word()
-    if word:
-        print(f"\nFinal word: {word}")
+        elif key == ord('r'):
+            recognizer.reset()
+            print("  Accumulator reset")
 
     cap.release()
     cv2.destroyAllWindows()
