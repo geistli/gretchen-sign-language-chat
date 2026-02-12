@@ -128,10 +128,8 @@ class MediaPipeRecognizer:
                     letter = gesture.category_name.upper()
                     conf = gesture.score
 
-                    if len(letter) != 1 or letter not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-                        continue
-
-                    if conf > best_conf:
+                    # Only accept single letters from valid ASL set
+                    if len(letter) == 1 and letter in config.LETTERS and conf > best_conf:
                         best_conf = conf
                         best_letter = letter
 
