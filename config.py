@@ -62,13 +62,13 @@ HSV_CYAN_UPPER = (100, 255, 255)
 BORDER_COLOR_MIN_RATIO = 0.3
 
 # --- Camera ---
-CAMERA_DEV = "/dev/grt_cam"
+CAMERA_DEV = "0"
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 
 # --- Robot ---
 ROBOT_MOTOR_DEV = "/dev/grt_motor"
-ROBOT_CAMERA_DEV = "/dev/grt_cam"
+ROBOT_CAMERA_DEV = "0"
 ROBOT_ANGLE_LIMIT_DEG = 20
 
 # --- Preprocessing ---

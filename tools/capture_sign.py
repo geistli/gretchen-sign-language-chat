@@ -21,7 +21,6 @@ import sys
 import os
 import argparse
 import time
-from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -79,7 +78,7 @@ def main():
     last_annotated = None
     flash_until = 0          # timestamp until which the flash overlay is shown
     flash_letter = ""        # letter shown in the flash
-    capture_count = 0
+    best_captures = {}       # letter -> confidence of saved image
 
     while True:
         ok, frame = cap.read()
@@ -95,19 +94,26 @@ def main():
             last_annotated = annotated
 
             if confirmed:
-                # Save the raw (un-annotated) frame
-                capture_count += 1
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{confirmed}_{timestamp}_{capture_count}.jpg"
-                filepath = os.path.join(args.out, filename)
-                cv2.imwrite(filepath, frame)
+                prev_conf = best_captures.get(confirmed, -1.0)
+                if conf > prev_conf:
+                    # Save the raw (un-annotated) frame, replacing any previous one
+                    filename = f"{confirmed}.jpg"
+                    filepath = os.path.join(args.out, filename)
+                    cv2.imwrite(filepath, frame)
+                    best_captures[confirmed] = conf
 
-                print(f"  CAPTURED  sign '{confirmed}'  ->  {filepath}")
+                    if prev_conf < 0:
+                        print(f"  CAPTURED  sign '{confirmed}' (conf {conf:.2f})  ->  {filepath}")
+                    else:
+                        print(f"  REPLACED  sign '{confirmed}' (conf {prev_conf:.2f} -> {conf:.2f})  ->  {filepath}")
+
+                    # Trigger flash overlay
+                    flash_until = now + FLASH_DURATION
+                    flash_letter = confirmed
+                else:
+                    print(f"  SKIPPED   sign '{confirmed}' (conf {conf:.2f} <= saved {prev_conf:.2f})")
+
                 print(f"  Word so far: {''.join(recognizer.word_buffer)}")
-
-                # Trigger flash overlay
-                flash_until = now + FLASH_DURATION
-                flash_letter = confirmed
 
         # --- Build display frame ---
         display = last_annotated if last_annotated is not None else frame
@@ -143,7 +149,9 @@ def main():
     if word:
         print(f"\nFinal word: {word}")
 
-    print(f"\nTotal photos captured: {capture_count}")
+    print(f"\nLetters captured: {len(best_captures)}")
+    for letter, c in sorted(best_captures.items()):
+        print(f"  {letter}: conf {c:.2f}")
     cap.release()
     cv2.destroyAllWindows()
     print("Done.")
