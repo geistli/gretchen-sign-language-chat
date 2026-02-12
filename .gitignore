@@ -1,25 +1,17 @@
 __pycache__/
 *.pyc
-*.pyo
 
-# Model weights (too large for git — download with tools/download_model.py)
+# Model weights (download with tools/download_model.py)
 model/*.pt
 model/*.task
 
-# Images (download with tools/download_images.py)
-images/*.jpg
-images/*.png
-images/backup/
+# Large image datasets
 images/kaggle/
-images/own/
+images/backup/
 images/test/
 
-# IDE
+# IDE / OS
 .vscode/
 .idea/
-
-# Archives
-*.zip
-
-# OS
 .DS_Store
+*.zip
