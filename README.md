@@ -5,7 +5,7 @@ Two Gretchen robots communicate via ASL (American Sign Language) letters display
 ## How It Works
 
 - **Display**: One laptop shows ASL hand sign photos one letter at a time
-- **Recognition**: The other laptop's camera detects the letters using a pretrained YOLOv8 model
+- **Recognition**: The other laptop's camera detects the letters using YOLO or MediaPipe gesture recognition
 - **Turn-taking**: Colored screen borders signal whose turn it is (green = showing letter, red = done, cyan = listening)
 - **Same code on both laptops**, differentiated by `--role speaker_first` or `--role listener_first`
 
@@ -30,22 +30,31 @@ source venv/bin/activate
 **With uv (recommended):**
 ```bash
 uv pip install ultralytics torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+uv pip install mediapipe
 ```
 
 **With pip:**
 ```bash
 pip install ultralytics torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+pip install mediapipe
 ```
 
 The `--extra-index-url` pulls CPU-only PyTorch builds (~200MB instead of ~2GB with CUDA). No GPU needed.
 
-### 4. Download the ASL YOLO model
+### 4. Download the recognition models
 
+**YOLO model** (object detection approach):
 ```bash
 python tools/download_model.py
 ```
+Downloads the pretrained YOLOv8s ASL model (~22MB) from HuggingFace into `model/`.
 
-This downloads the pretrained YOLOv8s model (~22MB) from HuggingFace into `model/`.
+**MediaPipe model** (hand landmark approach):
+```bash
+curl -L -o model/asl_finger_spelling.task \
+  "https://github.com/yoshan0921/asl-practice-app/raw/master/client/public/model/asl_finger_spelling.task"
+```
+Downloads the MediaPipe gesture recognizer (~8MB). This model detects hand skeleton landmarks and classifies the gesture, which may work better for screen-to-camera detection.
 
 ### 5. Get ASL alphabet images
 
@@ -85,12 +94,21 @@ python tools/test_display.py HELLO    # Show a specific word
 ```
 Keys: Space = next, Backspace = prev, G/R/C = border color, A = auto mode, ESC = quit
 
-### Test the recognizer
+### Test the recognizer (YOLO)
 ```bash
 python tools/test_recognizer.py                # Default camera
 python tools/test_recognizer.py --camera 0     # Webcam at index 0
 ```
-Keys: C = clear word, B = toggle border detection, ESC = quit
+Keys: C = clear word, B = toggle border detection, Q/ESC = quit
+
+### Test the recognizer (MediaPipe)
+```bash
+python tools/test_recognizer_mediapipe.py                # Default camera
+python tools/test_recognizer_mediapipe.py --camera 0     # Webcam at index 0
+```
+Keys: C = clear word, Q/ESC = quit
+
+MediaPipe draws hand skeleton landmarks and may be faster on CPU. Try both to see which works better for your setup.
 
 ### Run the full chat
 
@@ -120,18 +138,21 @@ python main.py --role speaker_first --no-robot --fullscreen
 ├── main.py              # Entry point, orchestrates conversation
 ├── config.py            # All constants (thresholds, colors, paths)
 ├── display.py           # Show ASL images in window with signal border
-├── recognizer.py        # YOLO detection + letter accumulation + border color detection
-├── protocol.py          # Turn-taking state machine
-├── conversation.py      # Word/message management and responses
+├── recognizer.py            # YOLO detection + letter accumulation + border color detection
+├── recognizer_mediapipe.py  # MediaPipe alternative recognizer
+├── protocol.py              # Turn-taking state machine
+├── conversation.py          # Word/message management and responses
 ├── model/
-│   └── (yolov8s_asl.pt)    # Downloaded pretrained weights (not in git)
+│   ├── (yolov8s_asl.pt)            # YOLO weights (not in git)
+│   └── (asl_finger_spelling.task)  # MediaPipe model (not in git)
 ├── images/
 │   └── (A.jpg ... Y.jpg)   # One photo per letter (not in git)
 └── tools/
-    ├── download_model.py    # Download model from HuggingFace
-    ├── download_images.py   # Download/generate ASL images
-    ├── test_display.py      # Standalone: cycle through letters
-    └── test_recognizer.py   # Standalone: detect ASL from camera
+    ├── download_model.py            # Download YOLO model from HuggingFace
+    ├── download_images.py           # Download/generate ASL images
+    ├── test_display.py              # Standalone: cycle through letters
+    ├── test_recognizer.py           # Test YOLO recognizer from camera
+    └── test_recognizer_mediapipe.py # Test MediaPipe recognizer from camera
 ```
 
 ## ASL Alphabet
