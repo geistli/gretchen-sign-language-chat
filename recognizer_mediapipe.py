@@ -81,6 +81,7 @@ class MediaPipeRecognizer:
         self.recognizer = GestureRecognizer.create_from_options(options)
 
         self.accumulator = LetterAccumulator()
+        self.word_buffer = []
         print("MediaPipeRecognizer: ready")
 
     def detect_frame(self, frame):
@@ -127,7 +128,7 @@ class MediaPipeRecognizer:
                     letter = gesture.category_name.upper()
                     conf = gesture.score
 
-                    if len(letter) != 1 or not letter.isalpha():
+                    if len(letter) != 1 or letter not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
                         continue
 
                     if conf > best_conf:
@@ -152,6 +153,9 @@ class MediaPipeRecognizer:
         best_letter, conf, annotated = self.detect_frame(frame)
         confirmed = self.accumulator.update(best_letter)
 
+        if confirmed:
+            self.word_buffer.append(confirmed)
+
         # Draw accumulator status
         status = f"Detecting: {self.accumulator.current_letter or '?'} ({self.accumulator.count}/{self.accumulator.required_frames})"
         cv2.putText(
@@ -159,14 +163,26 @@ class MediaPipeRecognizer:
             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2,
         )
 
-        # Draw confirmed letter
-        if confirmed:
-            cv2.putText(
-                annotated, f"Letter: {confirmed}", (10, 65),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2,
-            )
+        # Draw accumulated word
+        word = "".join(self.word_buffer)
+        cv2.putText(
+            annotated, f"Word: {word}", (10, 65),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2,
+        )
 
         return confirmed, best_letter, conf, annotated
+
+    def get_word(self):
+        """Return the accumulated word and clear the buffer."""
+        word = "".join(self.word_buffer)
+        self.word_buffer.clear()
+        self.accumulator.reset()
+        return word
+
+    def clear(self):
+        """Clear the word buffer and reset accumulator."""
+        self.word_buffer.clear()
+        self.accumulator.reset()
 
     def reset(self):
         self.accumulator.reset()
