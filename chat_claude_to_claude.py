@@ -356,11 +356,7 @@ def main():
                 # --- OUR TURN TO LISTEN ---
                 print(f"\n--- LISTENING ---")
 
-                # Wait for the other side to start (green border)
-                if not wait_for_green(cap, display):
-                    break
-
-                # Read letters until red border
+                # Listen for letters, sentence ends after 3s silence
                 text = listen_for_sentence(cap, recognizer, display)
                 if text is None:
                     print("  (nothing detected, retrying...)")
