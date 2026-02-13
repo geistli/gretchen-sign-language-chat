@@ -60,6 +60,9 @@ def ask_claude(received_text, history, is_opening):
         history_lines.append(f"  {speaker}: {w}")
     history_text = "\n".join(history_lines) if history_lines else "  (none yet)"
 
+    # Build list of already-used words to prevent repeats
+    used_words = [w for _, w in history]
+
     if is_opening:
         prompt = (
             "You are Gretchen, a small humanoid robot starting a sign language "
@@ -75,13 +78,14 @@ def ask_claude(received_text, history, is_opening):
             f"You are Gretchen, a small humanoid robot chatting in sign language "
             f"with another Gretchen robot.\n\n"
             f"Conversation so far:\n{history_text}\n  Them: {received_text}\n\n"
+            f"ALREADY USED (do NOT repeat any of these): {', '.join(used_words)}\n\n"
             f"Reply with a short response (1-3 words, max 8 letters per word) "
             f"using ONLY these letters: A B C D E F G H I K L M N O P Q R S T U V W X Y\n"
             f"(No J or Z — those need motion in ASL.)\n\n"
-            f"Be creative and conversational. Don't just echo back the same words. "
-            f"NEVER repeat something you already said.\n\n"
-            f"Just the words separated by spaces, nothing else. "
-            f"No punctuation, no explanation."
+            f"Be creative! Ask a question, share a feeling, be playful or curious. "
+            f"Examples of good words: COOL, NICE, THANKS, NAME, WHAT, HOW, GOOD, "
+            f"LOVE, FUN, SUPER, GREAT, MORE, SWEET, WILD, SURE, FINE, WOW\n\n"
+            f"Output ONLY the response word(s). No quotes, no punctuation, no explanation."
         )
 
     try:
@@ -359,8 +363,7 @@ def main():
                 # Listen for letters, sentence ends after 3s silence
                 text = listen_for_sentence(cap, recognizer, display)
                 if text is None:
-                    print("  (nothing detected, retrying...)")
-                    continue
+                    break
 
                 history.append(("received", text))
 
