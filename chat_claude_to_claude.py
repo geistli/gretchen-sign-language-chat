@@ -323,7 +323,7 @@ def main():
     print("=== Claude-to-Claude ASL Chat ===")
     print(f"Role: {args.role}")
     print(f"Max rounds: {args.rounds}")
-    print("Q/ESC = quit")
+    print("SPACE = switch turn | Q/ESC = quit")
     print()
 
     history = []
@@ -353,8 +353,15 @@ def main():
                 if not speak_text(text, display):
                     break
 
-                # Signal done
-                signal_done(display)
+                # Done speaking — show full text, wait for SPACE to switch
+                display.show_word(text, config.COLOR_GREEN)
+                print("  Press SPACE when other side is ready...")
+                while True:
+                    key = cv2.waitKey(50)
+                    if key == ord(" "):
+                        break
+                    if key == 27 or key == ord("q"):
+                        raise KeyboardInterrupt
 
                 # Switch to listening
                 speaking = False
@@ -362,19 +369,66 @@ def main():
             else:
                 # --- OUR TURN TO LISTEN ---
                 print(f"\n--- LISTENING ---")
+                print("  Press SPACE when other side is done speaking...")
+                display.show_blank(config.COLOR_CYAN)
 
-                # Wait for the other side to start (green border)
-                if not wait_for_green(cap, display):
-                    break
+                # Recognize letters until SPACE is pressed
+                recognizer.clear()
+                sentence = []
+                no_hand_frames = 0
+                space_inserted = True
+                last_detect_time = 0
 
-                # Read letters until red border or 3s silence
-                text = listen_for_sentence(cap, recognizer, display)
-                if text is None:
-                    break
+                while True:
+                    ok, frame = cap.read()
+                    if not ok:
+                        continue
 
+                    now = time.time()
+                    if now - last_detect_time >= DETECT_INTERVAL:
+                        last_detect_time = now
+                        confirmed, best, _, annotated = recognizer.process_frame(frame)
+
+                        if best is not None:
+                            no_hand_frames = 0
+                            space_inserted = False
+                        else:
+                            no_hand_frames += 1
+
+                        if no_hand_frames >= SPACE_GAP_FRAMES and not space_inserted and sentence and sentence[-1] != " ":
+                            sentence.append(" ")
+                            space_inserted = True
+                            print("    [SPACE]")
+
+                        if confirmed:
+                            if not sentence or sentence[-1] != confirmed:
+                                sentence.append(confirmed)
+                                print(f"    + {confirmed}  (so far: {''.join(sentence)})")
+                    else:
+                        annotated = frame
+
+                    # Draw sentence on camera feed
+                    text = "".join(sentence)
+                    h, w = annotated.shape[:2]
+                    cv2.rectangle(annotated, (0, h - 50), (w, h), (0, 0, 0), -1)
+                    cv2.putText(annotated, text, (10, h - 15),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                    cv2.imshow("ASL Camera", annotated)
+
+                    key = cv2.waitKey(1)
+                    if key == ord(" "):
+                        break
+                    if key == 27 or key == ord("q"):
+                        raise KeyboardInterrupt
+
+                text = "".join(sentence).strip()
+                if not text:
+                    print("  (nothing detected, retrying...)")
+                    continue
+
+                print(f"  <<< RECEIVED: {text}")
                 history.append(("received", text))
 
-                # Show what we got
                 display.show_word(f"GOT: {text}", config.COLOR_CYAN)
                 start = time.time()
                 while time.time() - start < 1.5:
