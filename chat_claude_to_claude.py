@@ -4,6 +4,8 @@ Claude-to-Claude Sign Language Chat.
 
 Two laptops, each running this script, have a real conversation via ASL.
 Claude decides what to say on each side — no scripted responses.
+Supports full sentences — spaces are shown as longer pauses between words,
+and detected by the listener when no hand is visible for several frames.
 
 Laptop A displays ASL letters → Laptop B's camera reads them →
 Claude on B thinks of a response → B displays it → A reads it → repeat.
@@ -33,7 +35,6 @@ import subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import cv2
-import numpy as np
 import config
 from recognizer_mediapipe import MediaPipeRecognizer
 from recognizer import detect_border_color
@@ -41,11 +42,17 @@ from display import ASLDisplay
 
 DETECT_INTERVAL = 1.0 / 5.0
 
+# Frames with no hand detected before inserting a space
+SPACE_GAP_FRAMES = 8
+
+# Seconds of silence (no new letters) before sentence is considered done
+SENTENCE_DONE_TIMEOUT = 3.0
+
 # Use own images for display
 OWN_IMAGES_DIR = os.path.join(config.BASE_DIR, "images", "own")
 
 
-def ask_claude(received_word, history, is_opening):
+def ask_claude(received_text, history, is_opening):
     """Ask Claude for a response via the claude CLI."""
     history_lines = []
     for direction, w in history:
@@ -57,21 +64,24 @@ def ask_claude(received_word, history, is_opening):
         prompt = (
             "You are Gretchen, a small humanoid robot starting a sign language "
             "conversation with another Gretchen robot.\n\n"
-            "Pick ONE short greeting word (1-8 letters) using ONLY these letters: "
-            "A B C D E F G H I K L M N O P Q R S T U V W X Y\n"
+            "Pick a short greeting (1-3 words, max 8 letters per word) using "
+            "ONLY these letters: A B C D E F G H I K L M N O P Q R S T U V W X Y\n"
             "(No J or Z — those need motion in ASL.)\n\n"
-            "Just the word, nothing else. No punctuation, no explanation."
+            "Just the words separated by spaces, nothing else. "
+            "No punctuation, no explanation."
         )
     else:
         prompt = (
             f"You are Gretchen, a small humanoid robot chatting in sign language "
             f"with another Gretchen robot.\n\n"
-            f"Conversation so far:\n{history_text}\n  Them: {received_word}\n\n"
-            f"Reply with ONE short word (1-8 letters) using ONLY these letters: "
-            f"A B C D E F G H I K L M N O P Q R S T U V W X Y\n"
+            f"Conversation so far:\n{history_text}\n  Them: {received_text}\n\n"
+            f"Reply with a short response (1-3 words, max 8 letters per word) "
+            f"using ONLY these letters: A B C D E F G H I K L M N O P Q R S T U V W X Y\n"
             f"(No J or Z — those need motion in ASL.)\n\n"
-            f"Be creative and conversational. Don't just echo back the same word.\n"
-            f"Just the word, nothing else. No punctuation, no explanation."
+            f"Be creative and conversational. Don't just echo back the same words. "
+            f"NEVER repeat something you already said.\n\n"
+            f"Just the words separated by spaces, nothing else. "
+            f"No punctuation, no explanation."
         )
 
     try:
@@ -80,9 +90,11 @@ def ask_claude(received_word, history, is_opening):
             capture_output=True, text=True, timeout=30,
         )
         response = result.stdout.strip().upper()
-        # Keep only valid ASL letters
-        filtered = "".join(c for c in response if c in config.LETTERS)
-        return filtered[:8] if filtered else "HI"
+        # Keep only valid ASL letters and spaces
+        filtered = "".join(c for c in response if c in config.LETTERS or c == " ")
+        # Clean up multiple spaces
+        filtered = " ".join(filtered.split())
+        return filtered if filtered else "HI"
     except subprocess.TimeoutExpired:
         print("  (Claude took too long, defaulting to HI)")
         return "HI"
@@ -94,20 +106,33 @@ def ask_claude(received_word, history, is_opening):
         return "HI"
 
 
-def speak_word(word, display):
-    """Display a word letter by letter with green border.
+def speak_text(text, display):
+    """Display text letter by letter with green border. Spaces become pauses.
 
     Returns True if completed, False if user pressed Q/ESC.
     """
-    letters = " ".join(word)
-    print(f"  >>> SENDING: {word}  [{letters}]")
+    print(f"  >>> SENDING: {text}")
 
-    for i, letter in enumerate(word):
-        if letter not in config.LETTERS:
+    letter_count = sum(1 for c in text if c != " ")
+    letter_idx = 0
+
+    for char in text:
+        if char == " ":
+            # Longer pause between words
+            display.show_blank(config.COLOR_GREEN)
+            start = time.time()
+            while time.time() - start < 1.0:
+                key = cv2.waitKey(50)
+                if key == 27 or key == ord("q"):
+                    return False
             continue
 
-        display.show_letter(letter, config.COLOR_GREEN)
-        print(f"    [{i+1}/{len(word)}] {letter}", end="  ", flush=True)
+        if char not in config.LETTERS:
+            continue
+
+        letter_idx += 1
+        display.show_letter(char, config.COLOR_GREEN)
+        print(f"    [{letter_idx}/{letter_count}] {char}", end="  ", flush=True)
 
         start = time.time()
         while time.time() - start < config.LETTER_DISPLAY_TIME:
@@ -124,8 +149,8 @@ def speak_word(word, display):
 
     print()
 
-    # Show full word briefly
-    display.show_word(word, config.COLOR_GREEN)
+    # Show full text briefly
+    display.show_word(text, config.COLOR_GREEN)
     start = time.time()
     while time.time() - start < 1.0:
         cv2.waitKey(50)
@@ -162,7 +187,6 @@ def wait_for_green(cap, display):
             print("  Detected GREEN — other side is speaking")
             return True
         if border == "red":
-            # They finished before we even noticed green — treat as our turn
             print("  Detected RED — missed their message, taking turn")
             return True
 
@@ -171,15 +195,21 @@ def wait_for_green(cap, display):
             return False
 
 
-def listen_for_word(cap, recognizer, display):
+def listen_for_sentence(cap, recognizer, display):
     """Read letters from camera until the other side signals done (red border).
+    Detects spaces when no hand is visible for several frames.
 
-    Returns the detected word, or None if interrupted.
+    Returns the detected sentence, or None if interrupted.
     """
     print("  Listening for letters...")
     display.show_blank(config.COLOR_CYAN)
     recognizer.clear()
+
+    sentence = []
+    no_hand_frames = 0
+    space_inserted = True
     last_detect_time = 0
+    last_letter_time = None  # when the last letter was confirmed
 
     while True:
         ok, frame = cap.read()
@@ -190,21 +220,54 @@ def listen_for_word(cap, recognizer, display):
         border = detect_border_color(frame)
 
         if border == "red":
-            word = recognizer.get_word()
-            if word:
-                print(f"  <<< RECEIVED: {word}")
-            return word if word else None
+            # Other side is done
+            text = "".join(sentence).strip()
+            if text:
+                print(f"  <<< RECEIVED: {text}")
+            return text if text else None
+
+        # Check silence timeout — sentence done if no new letters for 3s
+        now = time.time()
+        if sentence and last_letter_time and (now - last_letter_time) >= SENTENCE_DONE_TIMEOUT:
+            text = "".join(sentence).strip()
+            if text:
+                print(f"  <<< RECEIVED (timeout): {text}")
+                return text
 
         # Detect letters
-        now = time.time()
         if now - last_detect_time >= DETECT_INTERVAL:
             last_detect_time = now
-            confirmed, _, _, annotated = recognizer.process_frame(frame)
+            confirmed, best, _, annotated = recognizer.process_frame(frame)
+
+            # Track hand presence for space detection
+            if best is not None:
+                no_hand_frames = 0
+                space_inserted = False
+            else:
+                no_hand_frames += 1
+
+            # Insert space when hand gone long enough
+            if no_hand_frames >= SPACE_GAP_FRAMES and not space_inserted and sentence and sentence[-1] != " ":
+                sentence.append(" ")
+                space_inserted = True
+                print("    [SPACE]")
+
             if confirmed:
-                so_far = "".join(recognizer.word_buffer)
-                print(f"    + {confirmed}  (word so far: {so_far})")
+                last_letter_time = now
+                # Skip duplicate consecutive letters
+                if not sentence or sentence[-1] != confirmed:
+                    sentence.append(confirmed)
+                    text = "".join(sentence)
+                    print(f"    + {confirmed}  (so far: {text})")
         else:
             annotated = frame
+
+        # Draw current sentence on camera feed
+        text = "".join(sentence)
+        h, w = annotated.shape[:2]
+        cv2.rectangle(annotated, (0, h - 50), (w, h), (0, 0, 0), -1)
+        cv2.putText(annotated, text, (10, h - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
 
         cv2.imshow("ASL Camera", annotated)
 
@@ -269,18 +332,18 @@ def main():
 
                 # Ask Claude what to say
                 if not history:
-                    print("  Asking Claude for an opening word...")
-                    word = ask_claude(None, history, is_opening=True)
+                    print("  Asking Claude for an opening...")
+                    text = ask_claude(None, history, is_opening=True)
                 else:
                     last_received = history[-1][1] if history and history[-1][0] == "received" else None
                     print("  Asking Claude for a response...")
-                    word = ask_claude(last_received, history, is_opening=False)
+                    text = ask_claude(last_received, history, is_opening=False)
 
-                print(f"  Claude chose: {word}")
-                history.append(("sent", word))
+                print(f"  Claude chose: {text}")
+                history.append(("sent", text))
 
-                # Display the word as ASL letters
-                if not speak_word(word, display):
+                # Display the text as ASL letters
+                if not speak_text(text, display):
                     break
 
                 # Signal done
@@ -298,16 +361,15 @@ def main():
                     break
 
                 # Read letters until red border
-                word = listen_for_word(cap, recognizer, display)
-                if word is None:
-                    # Could be ESC or just empty message
-                    print("  (no word detected, retrying...)")
+                text = listen_for_sentence(cap, recognizer, display)
+                if text is None:
+                    print("  (nothing detected, retrying...)")
                     continue
 
-                history.append(("received", word))
+                history.append(("received", text))
 
                 # Show what we got
-                display.show_word(f"GOT: {word}", config.COLOR_CYAN)
+                display.show_word(f"GOT: {text}", config.COLOR_CYAN)
                 start = time.time()
                 while time.time() - start < 1.5:
                     cv2.waitKey(50)

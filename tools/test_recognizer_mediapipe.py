@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 #
-# Test tool: detect ASL letters using MediaPipe gesture recognizer.
+# Test tool: detect ASL letters and build sentences using MediaPipe.
+#
+# Drop your hand briefly between words to insert a space.
 #
 # Usage:
 #   python tools/test_recognizer_mediapipe.py                # Default camera
 #   python tools/test_recognizer_mediapipe.py --camera 0     # Webcam index 0
 #
 # Keys:
-#   R — reset accumulator
+#   C — clear sentence
+#   BACKSPACE — delete last letter
 #   Q/ESC — quit
 #
 
@@ -25,6 +28,9 @@ from recognizer_mediapipe import MediaPipeRecognizer
 
 # Run detection this many times per second
 DETECT_INTERVAL = 1.0 / 5.0
+
+# Frames with no hand detected before inserting a space
+SPACE_GAP_FRAMES = 8
 
 
 def main():
@@ -49,9 +55,14 @@ def main():
     # Load recognizer
     recognizer = MediaPipeRecognizer()
 
-    print("MediaPipe ASL Recognizer Test")
-    print("R=reset, Q/ESC=quit")
+    print("MediaPipe ASL Sentence Recognizer")
+    print("Sign letters — drop your hand between words for a space")
+    print("C=clear, BACKSPACE=delete last, Q/ESC=quit")
+    print()
 
+    sentence = []          # list of characters (letters and spaces)
+    no_hand_frames = 0     # frames since last hand detection
+    space_inserted = True  # prevent multiple spaces in a row
     last_detect_time = 0
     last_annotated = None
 
@@ -67,20 +78,54 @@ def main():
             confirmed, best, conf, annotated = recognizer.process_frame(frame)
             last_annotated = annotated
 
-            if confirmed:
-                print(f"  CONFIRMED: {confirmed}")
+            # Track whether a hand is visible
+            if best is not None:
+                no_hand_frames = 0
+                space_inserted = False
+            else:
+                no_hand_frames += 1
 
-        if last_annotated is not None:
-            cv2.imshow("MediaPipe ASL", last_annotated)
-        else:
-            cv2.imshow("MediaPipe ASL", frame)
+            # Insert space when hand has been gone long enough
+            if no_hand_frames >= SPACE_GAP_FRAMES and not space_inserted and sentence and sentence[-1] != " ":
+                sentence.append(" ")
+                space_inserted = True
+                print("  [SPACE]")
+
+            if confirmed:
+                # Skip duplicate consecutive letters
+                if not sentence or sentence[-1] != confirmed:
+                    sentence.append(confirmed)
+                    text = "".join(sentence)
+                    print(f"  [{confirmed}]  sentence: {text}")
+
+        # Draw sentence on the frame
+        display = last_annotated if last_annotated is not None else frame
+        text = "".join(sentence)
+
+        # Draw background bar for sentence
+        h, w = display.shape[:2]
+        cv2.rectangle(display, (0, h - 50), (w, h), (0, 0, 0), -1)
+        cv2.putText(display, text, (10, h - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+
+        cv2.imshow("MediaPipe ASL", display)
 
         key = cv2.waitKey(1)
         if key == 27 or key == ord('q'):
             break
-        elif key == ord('r'):
-            recognizer.reset()
-            print("  Accumulator reset")
+        elif key == ord('c'):
+            sentence.clear()
+            recognizer.clear()
+            space_inserted = True
+            print("  Cleared.")
+        elif key == 8 or key == 127:  # backspace
+            if sentence:
+                removed = sentence.pop()
+                print(f"  Deleted: '{removed}'")
+
+    if sentence:
+        text = "".join(sentence)
+        print(f"\nFinal sentence: {text}")
 
     cap.release()
     cv2.destroyAllWindows()

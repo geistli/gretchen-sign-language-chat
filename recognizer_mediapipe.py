@@ -152,7 +152,9 @@ class MediaPipeRecognizer:
         confirmed = self.accumulator.update(best_letter)
 
         if confirmed:
-            self.word_buffer.append(confirmed)
+            # Skip duplicate consecutive letters (e.g. HH → H)
+            if not self.word_buffer or self.word_buffer[-1] != confirmed:
+                self.word_buffer.append(confirmed)
 
         # Draw accumulator status
         status = f"Detecting: {self.accumulator.current_letter or '?'} ({self.accumulator.count}/{self.accumulator.required_frames})"
