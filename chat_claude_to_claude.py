@@ -89,9 +89,12 @@ def ask_claude(received_text, history, is_opening):
         )
 
     try:
+        # Unset CLAUDECODE so claude -p works inside a Claude Code session
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
         result = subprocess.run(
             ["claude", "-p", prompt],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, env=env,
         )
         response = result.stdout.strip().upper()
         # Keep only valid ASL letters and spaces
@@ -360,7 +363,11 @@ def main():
                 # --- OUR TURN TO LISTEN ---
                 print(f"\n--- LISTENING ---")
 
-                # Listen for letters, sentence ends after 3s silence
+                # Wait for the other side to start (green border)
+                if not wait_for_green(cap, display):
+                    break
+
+                # Read letters until red border or 3s silence
                 text = listen_for_sentence(cap, recognizer, display)
                 if text is None:
                     break

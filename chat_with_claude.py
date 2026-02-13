@@ -53,9 +53,12 @@ def ask_claude(word, history):
     )
 
     try:
+        # Unset CLAUDECODE so claude -p works inside a Claude Code session
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
         result = subprocess.run(
             ["claude", "-p", prompt],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, env=env,
         )
         response = result.stdout.strip().upper()
         # Keep only valid ASL letters
